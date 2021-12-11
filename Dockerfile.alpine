@@ -2,5 +2,6 @@ FROM alpine
 RUN  apk update && apk add --no-cache linux-tools-usbip
 RUN  if [ ! -e /usr/share/hwdata/usb.ids ]; then mkdir -p /usr/share/hwdata && ln -s /dev/null /usr/share/hwdata/usb.ids; fi
 ARG  SERVICE
-COPY usbip-common.sh "${SERVICE}/init" /opt/usbip-${SERVICE}/
-CMD  [ "/opt/usbip-${SERVICE}/init" ]
+ENV  USBIP_HOME="/opt/usbip-${SERVICE}"
+COPY usbip-common.sh "${SERVICE}/init" "${USBIP_HOME}/"
+CMD  exec "${USBIP_HOME}/init"

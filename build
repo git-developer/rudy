@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
+distros="${1:-*}"
 dir="$(dirname "${0}")"
-find "${dir}" -maxdepth 1 -name 'Dockerfile.*' -printf '%f\n' \
+find "${dir}" -maxdepth 1 -name "Dockerfile.${distros}" -printf '%f\n' \
 | while read file; do
   distro="${file##Dockerfile.}"
   find  "${dir}" -maxdepth 1 -type d ! -iname ".*" -printf '%f\n' \
