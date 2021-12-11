@@ -1,0 +1,5 @@
+FROM debian:bullseye-slim
+RUN  apt-get update && apt-get install -y usbip && apt-get clean
+ARG  SERVICE
+COPY usbip-common.sh "${SERVICE}/init" "/opt/usbip-${SERVICE}/"
+CMD  [ "/opt/usbip-${SERVICE}/init" ]

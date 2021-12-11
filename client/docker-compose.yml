@@ -1,0 +1,30 @@
+services:
+  usbip-client:
+    #
+    # host requirement: kernel module `vhci-hcd`
+    # - command to load until next boot: `modprobe vhci-hcd`
+    # - command to load after next boot: `echo vhci-hcd >>/etc/modules`
+    #
+
+    image: ckware/usbip-client
+    container_name: usbip-client
+    init: true
+    restart: unless-stopped
+    environment:
+      USBIP_SERVER: "server-host"
+#     USBIP_DEVICE_IDS: "0000:0000,1111:1111"
+      USBIP_BUS_IDS: "1-1.1,2-2.2"
+#     USBIP_DEBUG: "true"
+
+      #
+      # privileged mode is required to write to
+      # `/sys/devices/platform/vhci_hcd.0`
+      #
+      # Related issue:
+      # - [Docker Mount sysfs sub-directory RW without --privileged](https://github.com/moby/moby/issues/22825)
+      #
+      # Alternative:
+      # - Replace runc with sysbox, see
+      #   [Unable to mount /sys inside the container with rw access in unprivileged mode](https://forums.docker.com/t/97043)
+      #
+    privileged: true

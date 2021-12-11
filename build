@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+dir="$(dirname "${0}")"
+find "${dir}" -maxdepth 1 -name 'Dockerfile.*' -printf '%f\n' \
+| while read file; do
+  distro="${file##Dockerfile.}"
+  find  "${dir}" -maxdepth 1 -type d ! -iname ".*" -printf '%f\n' \
+  | while read service; do
+    docker build \
+    -t "ckware/usbip-${service}:${distro}" \
+    -f "${dir}/Dockerfile.${distro}" \
+    --build-arg "SERVICE=${service}" \
+    "${dir}"
+  done
+done
