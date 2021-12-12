@@ -32,12 +32,20 @@ services:
    ```
 1. Create a configuration file `docker-compose.yml` (see the examples and docs for an inspiration)
 
-#### Container lifecycle
+#### Lifecycle commands
+All commands assume that the container is named `usbip-server`.
+
 * Start the server: `docker-compose up -d`
 * Stop the server: `docker-compose down`
-* Restart a server named `usbip-server`:
+* Restart the server:
 
   `docker-compose exec usbip-server restart`
+* List all devices connected to the server host:
+
+  `docker exec usbip-server usbip list -l`
+* List devices available for clients:
+
+  `docker exec usbip-server usbip list -r localhost`
 
 ### Required Docker configuration options
 | Option        | Description            | Recommendation | Explanation |
@@ -71,12 +79,17 @@ services:
    ```
 1. Create a configuration file `docker-compose.yml` (see the examples and docs for an inspiration)
 
-#### Container lifecycle
+#### Lifecycle commands
+All commands assume that the container is named `usbip-client`.
+
 * Start the client: `docker-compose up -d`
 * Stop the client: `docker-compose down`
-* Restart a client named `usbip-client`:
+* Restart the client:
 
   `docker-compose exec usbip-client restart`
+* List devices currently managed by the client:
+
+  `docker exec usbip-client usbip port`
 
 ### Required Docker configuration options
 | Option        | Description     | Required | Explanation |
@@ -109,4 +122,29 @@ On debian-based systems, `docker-compose` may be installed by calling
 
 ```shell
 $ sudo apt install docker-compose
+```
+
+## Pitfalls
+### Connection issues
+When the server is stopped, a connected client loses all managed devices silently.
+This scenario may be verified by requesting the list of imported USB devices on the client, which is empty in this case:
+```shell
+$ docker-compose exec usbip-client usbip port
+Imported USB devices
+====================
+$ _
+```
+
+To reconnect after the server is up again, run on the client:
+
+```shell
+$ docker-compose exec usbip-client restart
+```
+After that, the list of managed devices should be no longer empty:
+```shell
+$ docker-compose exec usbip-client usbip port
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+...
 ```
