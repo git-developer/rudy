@@ -2,6 +2,7 @@
 set -eu
 
 log_file=/dev/stderr
+pid_file=/var/run/usbip.pid
 
 log() {
   echo >"${log_file}" "${@}"
@@ -41,6 +42,7 @@ reload() {
 }
 
 load() {
+  echo "$$">"${pid_file}"
   start
   tail -f /dev/null &
   wait "${!}"

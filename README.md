@@ -25,11 +25,19 @@ services:
 ```
 
 ### Usage
-* Enable kernel module `usbip-host` on the host:
+#### Preparation
+1. Enable kernel module `usbip-host` on the host:
+   ```shell
+   $ sudo sh -c 'modprobe usbip-host && echo usbip-host >>/etc/modules'
+   ```
+1. Create a configuration file `docker-compose.yml` (see the examples and docs for an inspiration)
 
-  `$ sudo sh -c 'modprobe usbip-host && echo usbip-host >>/etc/modules'`
-* Create a configuration file `docker-compose.yml` (see the examples and docs for an inspiration)
-* Start usbip-server by calling `docker-compose up -d`
+#### Container lifecycle
+* Start the server: `docker-compose up -d`
+* Stop the server: `docker-compose down`
+* Restart a server named `usbip-server`:
+
+  `docker-compose exec usbip-server restart`
 
 ### Required Docker configuration options
 | Option        | Description            | Recommendation | Explanation |
@@ -56,11 +64,19 @@ services:
 ```
 
 ### Usage
-* Enable kernel module `vhci-hcd`:
+#### Preparation
+1. Enable kernel module `vhci-hcd` on the host:
+   ```shell
+   $ sudo sh -c 'modprobe vhci-hcd && echo vhci-hcd >>/etc/modules'
+   ```
+1. Create a configuration file `docker-compose.yml` (see the examples and docs for an inspiration)
 
-  `$ sudo sh -c 'modprobe vhci-hcd && echo vhci-hcd >>/etc/modules'`
-* Create a configuration file `docker-compose.yml` (see the examples and docs for an inspiration)
-* Start usbip-client by calling `docker-compose up -d`
+#### Container lifecycle
+* Start the client: `docker-compose up -d`
+* Stop the client: `docker-compose down`
+* Restart a client named `usbip-client`:
+
+  `docker-compose exec usbip-client restart`
 
 ### Required Docker configuration options
 | Option        | Description     | Required | Explanation |

@@ -2,7 +2,8 @@ FROM debian:buster-slim
 RUN  apt-get update && apt-get install -y usbip && apt-get clean
 ARG  SERVICE
 ENV  USBIP_HOME="/opt/usbip-${SERVICE}"
-COPY usbip-common.sh "${SERVICE}/init" "${USBIP_HOME}/"
+ENV  PATH="${PATH}:${USBIP_HOME}"
+COPY common/* "${SERVICE}/init" "${USBIP_HOME}/"
 # bash is preferred over sh as workaround for
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=779416
 # affected package is dash:0.5.10.2-5, fixed in 0.5.11
