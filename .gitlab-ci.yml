@@ -1,0 +1,7 @@
+build-services:
+  trigger:
+    include: .build.yml
+  parallel:
+    matrix:
+      - SERVICE: [server, client]
+        DISTRO:  [alpine, buster, bullseye]

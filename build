@@ -1,16 +1,16 @@
 #!/bin/sh
 set -eu
-distros="${1:-*}"
-dir="$(dirname "${0}")"
-find "${dir}" -maxdepth 1 -name "Dockerfile.${distros}" -printf '%f\n' \
+distros="${1:-.*}"
+build_context="$(dirname "${0}")/image"
+find "${build_context}" -maxdepth 1 -regex "${build_context}/Dockerfile\.${distros}" -printf '%f\n' \
 | while read file; do
   distro="${file##Dockerfile.}"
-  find  "${dir}" -maxdepth 1 -type d ! -iname ".*" -printf '%f\n' \
+  find  "${build_context}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
   | while read service; do
     docker build \
     -t "ckware/usbip-${service}:${distro}" \
-    -f "${dir}/Dockerfile.${distro}" \
+    -f "${build_context}/Dockerfile.${distro}" \
     --build-arg "SERVICE=${service}" \
-    "${dir}"
+    "${build_context}"
   done
 done

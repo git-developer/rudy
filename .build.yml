@@ -1,0 +1,41 @@
+include:
+  remote: "https://github.com/git-developer/docker-support/raw/v3.1.0/gitlab-ci/docker-template.yml"
+
+variables:
+  IMAGE_NAME: "${CI_PROJECT_NAMESPACE}/usbip-${SERVICE}"
+  IMAGE_VERSION: "${DISTRO}"
+  IMAGE_PLATFORMS: 'linux/amd64,linux/i386,linux/arm64,linux/arm'
+  BUILD_ARGS: "SERVICE=${SERVICE}"
+  DEFAULT_DISTRO: "alpine"
+
+read_application_tags:
+  stage: post_checkout
+  image: busybox
+  artifacts:
+    paths:
+    - tags
+  script:
+  - set -euo pipefail
+  - mkdir -p tags
+  - build_date="$(date --utc -I)"
+  - echo >tags/build-date "${IMAGE_NAME}:${build_date}-${DISTRO}"
+  - |
+    if test "${DISTRO}" = "${DEFAULT_DISTRO}"; then
+      echo >tags/default-build-date "${IMAGE_NAME}:${build_date}"
+      echo >tags/default-latest "${IMAGE_NAME}:latest"
+    fi
+
+prepare_dockerfile:
+  stage: pre_build
+  dependencies: []
+  image: busybox
+  artifacts:
+    paths:
+    - "${BUILD_CONTEXT}/Dockerfile"
+  script:
+  - test -e "${BUILD_CONTEXT}/Dockerfile.${DISTRO}" && ln -s "Dockerfile.${DISTRO}" "${BUILD_CONTEXT}/Dockerfile"
+
+build_image:
+  dependencies:
+  - prepare_build_arguments
+  - prepare_dockerfile
