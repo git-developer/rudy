@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+. "$(dirname "${0}")/base.sh"
+
+# Take the route via `kill` and do not directly call `reload()` here
+# because one of the killed processes could be the running process.
+if [ -e "${pid_file}" ]; then
+  kill -HUP "$(cat "${pid_file}")"
+else
+  error config "Unable to reload because PID of main process is lost."
+fi

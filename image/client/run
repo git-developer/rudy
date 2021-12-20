@@ -1,0 +1,118 @@
+#!/bin/sh
+set -eu
+
+. "$(dirname "${0}")/mqtt-support.sh"
+port_file="${run_dir}/client.ports"
+
+convert_device_ids_to_bus_ids() {
+  local device_ids="${1}"
+  info_about usbip ${USBIP_PORT:+-t "${USBIP_PORT}"} list -r "${USBIP_SERVER}" \
+             | sed -nE "s/^\s*([^:]+):.* \((${device_ids})\)$/\1/p"
+}
+
+attach_device() {
+  set -eu
+  local bus_id="${1}"
+  local output
+  if output="$(usbip ${USBIP_PORT:+-t "${USBIP_PORT}"} --debug attach -r "${USBIP_SERVER}" -b "${bus_id}" 2>&1)"; then
+    rc="$?"
+    echo "${output}" | tail -n 1 | sed -nE 's/^.*attached port: ([0-9]+)\s*$/\1/p'
+  else
+    rc="$?"
+    local errors="$(echo "${output}" | grep ' error: ')"
+    [ -z "${errors}" ] || error config "${errors}"
+  fi
+  return "${rc}"
+}
+
+attach() {
+  local bus_id="${1}"
+  local port
+  if port="$(attach_device ${bus_id})" && [ -n "${port}" ]; then
+    echo "${port}" >>"${port_file}"
+    mqtt_publish "attach" "${port}: ${USBIP_SERVER} ${USBIP_PORT:-3240} ${bus_id}"
+  else
+    rc="$?"
+    error config "Attachment failed. Possible causes:" \
+      "- Bus id '${bus_id}' is invalid" \
+      "- Kernel module 'vhci-hcd' is not loaded (try 'modprobe vhci-hcd')" \
+      "- No write access to /sys/devices/platform/ (try to run as root)"
+    return "${rc}"
+  fi
+}
+
+detach() {
+  local port_id="${1}"
+  if usbip ${RUDY_DEBUG:+--debug} detach -p "${port_id}"; then
+    info "Detached port ${port_id}."
+    mqtt_publish "detach" "${port_id}"
+  fi
+}
+
+detach_orphans() {
+  [ -n "${USBIP_DEVICE_IDS}" ] || return 0
+  info "Detaching orphans"
+
+  local device_ids
+  device_ids="$(echo "${USBIP_DEVICE_IDS}" | tr ',' '|')"
+  usbip port \
+  | sed -nE "N;s/Port ([0-9]+).*\n.*\((${device_ids})\)/\1/p" \
+  | while read port_id; do detach "${port_id}"; done
+}
+
+detach_all() {
+  info "Detaching all ports"
+  usbip port \
+  | sed -nE 's/^Port ([^:]+):.*$/\1/p' \
+  | while read port_id; do detach "${port_id}"; done
+}
+
+start() {
+  info "Starting client..."
+
+  if [ -z "${USBIP_SERVER-}" ]; then
+    error config "Missing environment variable USBIP_SERVER"
+    return 1
+  fi
+
+  local bus_ids
+  bus_ids="$(find_bus_ids)"
+
+  info "Starting attachment..."
+  info "Attaching ${bus_ids}"
+  echo "${bus_ids}" | tr ',' '\n' | while read bus_id; do attach "${bus_id}"; done
+  local port_ids="$(xargs -a "${port_file}")"
+  info "Attachment complete. Port ids: ${port_ids}"
+  sleep 1
+  info "$(usbip ${RUDY_DEBUG:+--debug} port)"
+
+  tail -f /dev/null &
+  echo "${!}" >>"${daemon_file}"
+
+  mqtt_publish "start" "${port_ids}"
+  mqtt_subscribe
+  info "Client is started."
+}
+
+stop() {
+  info "Stopping client..."
+
+  info "Detaching..."
+  if [ -f "${port_file}" ]; then
+    while read port_id; do detach "${port_id}"; done <"${port_file}"
+    rm "${port_file}"
+  fi
+  [ "${USBIP_DETACH_ORPHANS:-true}" != 'true' ] || detach_orphans
+  [ "${USBIP_DETACH_ALL:-false}" != 'true' ] || detach_all
+  info "Detachment complete."
+
+  if [ -e "${daemon_file}" ]; then
+    info "Stopping child processes."
+    kill $(xargs -a "${daemon_file}") || true
+    rm "${daemon_file}"
+  fi
+  mqtt_publish "stop"
+  info "Client is stopped."
+}
+
+main

@@ -1,8 +1,8 @@
 FROM alpine
-RUN  apk update && apk add --no-cache linux-tools-usbip
+RUN  apk update && apk add --no-cache linux-tools-usbip mosquitto-clients
 RUN  if [ ! -e /usr/share/hwdata/usb.ids ]; then mkdir -p /usr/share/hwdata && ln -s /dev/null /usr/share/hwdata/usb.ids; fi
 ARG  SERVICE
-ENV  USBIP_HOME="/opt/usbip-${SERVICE}"
-ENV  PATH="${PATH}:${USBIP_HOME}"
-COPY common/* "${SERVICE}/init" "${USBIP_HOME}/"
-CMD  exec "${USBIP_HOME}/init"
+ENV  RUDY_HOME="/opt/rudy-${SERVICE}"
+ENV  PATH="${PATH}:${RUDY_HOME}"
+COPY common/* "${SERVICE}/run" "${RUDY_HOME}/"
+CMD  exec "${RUDY_HOME}/run"

@@ -1,0 +1,83 @@
+#!/bin/sh
+set -eu
+
+. "$(dirname "${0}")/mqtt-support.sh"
+busid_file="${run_dir}/server.busids"
+
+convert_device_ids_to_bus_ids() {
+  local device_ids="${1}"
+  usbip list -p -l | sed -nE "s/busid=(.+)#usbid=(${device_ids})#/\1/p"
+}
+
+bind() {
+  local bus_id="${1}"
+  if grep "${bus_id}" "${busid_file}" >/dev/null; then
+    warn "Skipping binding of ${bus_id} because it is already bound"
+  else
+    info "Binding ${bus_id}"
+    usbip ${RUDY_DEBUG:+--debug} bind -b "${bus_id}" || {
+      rc="$?"
+      error config \
+        "Binding failed. Possible causes:" \
+        "- Bus id '${bus_id}' is invalid" \
+        "- Kernel module 'usbip-host' is not loaded (try 'modprobe usbip-host')" \
+        "- No write access to /sys/bus/usb/drivers"
+      return "${rc}"
+    }
+    echo "${bus_id}" >>"${busid_file}"
+    mqtt_publish "bind" "${bus_id}"
+  fi
+}
+
+unbind() {
+  local bus_id="${1}"
+  if usbip ${RUDY_DEBUG:+--debug} unbind -b "${bus_id}"; then
+    mqtt_publish "unbind" "${bus_id}"
+  fi
+}
+
+start() {
+  info "Starting server..."
+
+  local bus_ids
+  bus_ids="$(find_bus_ids)"
+
+  if [ ! -e "${daemon_file}" ]; then
+    info "Starting network listener..."
+    usbipd ${RUDY_DEBUG:+--debug} 2>&1 >"${log_file}" &
+    echo "${!}" >>"${daemon_file}"
+    info "Network listener is started."
+  else
+    warn "Reusing running network listener"
+  fi
+
+  usbip list -r localhost | sed -nE "s/^\s*([^: ]+):.*$/\1/p" >>"${busid_file}"
+  [ ! -s "${busid_file}" ] || warn "Taking over devices that are already bound: $(xargs -a ${busid_file})"
+  echo "${bus_ids}" | while read busid; do bind "${busid}"; done
+
+  local devices
+  devices="$(info_about usbip list -r localhost)"
+  mqtt_publish "start" "${devices}"
+  mqtt_subscribe
+  info "Server is started."
+}
+
+stop() {
+  info "Stopping server..."
+  info "Unbinding all devices..."
+  if [ -f "${busid_file}" ]; then
+    while read bus_id; do unbind "${bus_id}"; done <"${busid_file}"
+    rm "${busid_file}"
+  fi
+  info "Unbinding complete."
+  info "Stopping network listener"
+  if [ -e "${daemon_file}" ]; then
+    info "Stopping child processes."
+    kill $(xargs -a "${daemon_file}") || true
+    rm "${daemon_file}"
+  fi
+  mqtt_publish "stop"
+  info "Server is stopped."
+}
+
+main

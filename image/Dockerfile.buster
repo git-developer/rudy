@@ -1,10 +1,10 @@
 FROM debian:buster-slim
-RUN  apt-get update && apt-get install -y usbip && apt-get clean
+RUN  apt-get update && apt-get install -y usbip mosquitto-clients && apt-get clean
 ARG  SERVICE
-ENV  USBIP_HOME="/opt/usbip-${SERVICE}"
-ENV  PATH="${PATH}:${USBIP_HOME}"
-COPY common/* "${SERVICE}/init" "${USBIP_HOME}/"
+ENV  RUDY_HOME="/opt/rudy-${SERVICE}"
+ENV  PATH="${PATH}:${RUDY_HOME}"
+COPY common/* "${SERVICE}/run" "${RUDY_HOME}/"
 # bash is preferred over sh as workaround for
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=779416
 # affected package is dash:0.5.10.2-5, fixed in 0.5.11
-CMD  exec bash "${USBIP_HOME}/init"
+CMD  exec bash "${RUDY_HOME}/run"

@@ -1,4 +1,0 @@
-#!/bin/sh
-set -eu
-. "$(dirname "${0}")/usbip-common.sh"
-[ ! -e "${pid_file}" ] || kill -HUP "$(cat "${pid_file}")"

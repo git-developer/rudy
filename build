@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
+IMAGE_PREFIX="${IMAGE_PREFIX:-ckware/rudy}"
 distros="${1:-.*}"
-image_prefix='ckware/usbip'
 build_context="$(dirname "${0}")/image"
 find "${build_context}" -maxdepth 1 -regex "${build_context}/Dockerfile\.${distros}" -printf '%f\n' \
 | while read file; do
@@ -9,7 +9,7 @@ find "${build_context}" -maxdepth 1 -regex "${build_context}/Dockerfile\.${distr
   find  "${build_context}" -mindepth 1 -maxdepth 1 -type d ! -name common -printf '%f\n' \
   | while read service; do
     docker build \
-    -t "${image_prefix}-${service}:${distro}" \
+    -t "${IMAGE_PREFIX}-${service}:${distro}" \
     -f "${build_context}/Dockerfile.${distro}" \
     --build-arg "SERVICE=${service}" \
     "${build_context}"
