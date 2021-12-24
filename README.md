@@ -118,8 +118,8 @@ All _Common environment variables_ and:
 ## Common environment variables
 | Variable           | Description            | Supported values          | Default | Example               | Explanation
 | ------------------ | ---------------------- | ------------------------- | ------- | --------------------- | -----------
-| `USBIP_DEVICE_IDS` | List of USB device IDs | `VID:PID` list            | _none_  | `0000:0000,1111:1111` | Comma-separated Device-ID list of managed USB devices. This option does not support more than one device per ID.
-| `USBIP_BUS_IDS`    | List of USB bus IDs    | List of logical Bus IDs   | _none_  | `1-1.1,2-2.2`         | Comma-separated ID list of managed USB devices. This option can be used to use multiple devices with the same Device-ID. The logical Bus-ID of a device will change when it is plugged into a different USB port.
+| `USBIP_DEVICE_IDS` | USB device IDs         | `VID:PID` list            | _none_  | `0000:0000,1111:1111` | Comma-separated device id list of managed USB devices. When this option is set, all devices with the given device ids are managed. If you want to select a subset only, use `USBIP_BUS_IDS` instead.
+| `USBIP_BUS_IDS`    | USB bus IDs            | List of logical bus IDs   | _none_  | `1-1.1,2-2.2`         | Comma-separated bus id list of managed USB devices. This option can be used to differentiate between devices that share the same device id. The logical Bus-ID of a device will change when it is plugged into a different USB port.
 | `RUDY_DEBUG`       | Enable debug logging   | String                    | _none_  | `true`                | When this option is set to any non-empty value, debug logging is enabled.
 | `RUDY_TRACE`       | Enable trace logging   | String                    | _none_  | `true`                | When this option is set to any non-empty value, trace logging is enabled.
 | `MQTT_OPTIONS`      | Common MQTT options    | All options [supported by `mosquitto_pub`](https://mosquitto.org/man/mosquitto_pub-1.html) | _none_ | `-h broker-host -i rudy-client` | Default MQTT options for both publish and subscribe
@@ -127,8 +127,6 @@ All _Common environment variables_ and:
 | `MQTT_PUBLISH_OPTIONS`  | MQTT options for publish | All options [supported by `mosquitto_pub`](https://mosquitto.org/man/mosquitto_pub-1.html) | _none_ | `-q 1` | MQTT options for publishing only. This option overrides `MQTT_OPTIONS`: when set, `MQTT_OPTIONS` is ignored for publishing.
 | `MQTT_RELOAD_ON_TOPIC` | MQTT topic for a reload hook | [Topic names](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718106) | _none_ | `rudy/server/start` | When this option is set, the service will subscribe to the configured topic and reload if a message is published to it.
 | `MQTT_SUBSCRIBE_OPTIONS`  | MQTT options for subscribe | All options [supported by `mosquitto_pub`](https://mosquitto.org/man/mosquitto_pub-1.html) | _none_ | `-q 2` | MQTT options for subscribing only. This option overrides `MQTT_OPTIONS`: when set, `MQTT_OPTIONS` is ignored for subscribing.
-
-Only one of `USBIP_DEVICE_IDS` and `USBIP_BUS_IDS` is required; when both variables are given, `USBIP_BUS_IDS` is preferred.
 
 ## Pre-requisites
 - A linux system with `docker-compose`.

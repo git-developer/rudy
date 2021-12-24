@@ -4,9 +4,8 @@ set -eu
 . "$(dirname "${0}")/mqtt-support.sh"
 busid_file="${run_dir}/server.busids"
 
-convert_device_ids_to_bus_ids() {
-  local device_ids="${1}"
-  usbip list -p -l | sed -nE "s/busid=(.+)#usbid=(${device_ids})#/\1/p"
+get_id_map() {
+  usbip list -p -l
 }
 
 bind() {

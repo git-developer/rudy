@@ -16,10 +16,12 @@ set -eu
 #     Description:     Stops the service.
 #     Arguments:       none
 #     Expected output: none
-#   convert_device_ids_to_bus_ids()
-#     Description:     Converts Device-IDs into Bus-IDs
-#     Arguments:       A comma-separated list of Device-IDs, e.g. `0000:0000,1111:1111`
-#     Expected output: A newline-separated list of Bus-IDs, e.g. `1-1.1\n2-2.2`
+#   get_id_map()
+#     Description:     Returns mappings between Bus-ID and Device-ID.
+#     Arguments:       none
+#     Expected output: A newline-separated list of mappings.
+#                      Each mapping has the format busid=<bus-id>#usbid=<device-id>#
+#                      Example: `busid=1-1.1#usbid=1111:1111#\nbusid=2-2.2#usbid=2222:2222#`
 #
 # Optional:
 #   on_error()
@@ -64,21 +66,40 @@ info_about() {
   echo "${output}"
 }
 
+get_bus_ids_from_device_ids() {
+  info "Detecting bus ids from device ids ${USBIP_DEVICE_IDS}"
+  id_map="$(get_id_map)"
+  echo "${USBIP_DEVICE_IDS}" | tr ',' '\n' | while read device_id; do
+    bus_id="$(echo "${id_map}" | sed -nE "s/busid=([^#].+)#usbid=${device_id}#/\1/p")"
+    if [ -n "${bus_id}" ]; then
+      echo "${bus_id}"
+    else
+      error config "No bus id found for device id '${device_id}'"
+      return 3
+    fi
+  done
+}
+
 find_bus_ids() {
+  set -eu
   local bus_ids
-  if [ -n "${USBIP_BUS_IDS-}" ]; then
-    bus_ids="${USBIP_BUS_IDS}"
-    [ -z "${USBIP_DEVICE_IDS-}" ] || info "Ignoring USBIP_DEVICE_IDS for USBIP_BUS_IDS"
-  elif [ -n "${USBIP_DEVICE_IDS-}" ]; then
-    info "Detecting bus ids from device ids ${USBIP_DEVICE_IDS}"
-    local device_ids
-    device_ids="$(echo "${USBIP_DEVICE_IDS}" | tr ',' '|')"
-    bus_ids="$(convert_device_ids_to_bus_ids "${device_ids}")"
-    [ -n "${bus_ids}" ] || error server "No bus ids found for device ids ${USBIP_DEVICE_IDS}"
-  else
-    error config "One of [USBIP_BUS_IDS, USBIP_DEVICE_IDS] must be set as environment variable."
+
+  if [ -z "${USBIP_DEVICE_IDS-}" ] && [ -z "${USBIP_BUS_IDS-}" ]; then
+    error config "One of the environment variables [USBIP_BUS_IDS, USBIP_DEVICE_IDS] must be set."
+    return 2
   fi
-  if [ -z "${bus_ids-}" ]; then
+
+  if [ -n "${USBIP_DEVICE_IDS-}" ]; then
+    bus_ids="$(get_bus_ids_from_device_ids)"
+    info "Detected bus ids: $(echo "${bus_ids}" | xargs)"
+  fi
+  if [ -n "${USBIP_BUS_IDS-}" ]; then
+    bus_ids="$(printf "${bus_ids:+${bus_ids}\n}$(echo "${USBIP_BUS_IDS}" | tr ',' '\n')" | sort | uniq)"
+  fi
+
+  if [ -n "${bus_ids}" ]; then
+    info "Found bus ids: $(echo "${bus_ids}" | xargs)"
+  else
     error config "No bus ids found."
     return 2
   fi

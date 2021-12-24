@@ -4,10 +4,9 @@ set -eu
 . "$(dirname "${0}")/mqtt-support.sh"
 port_file="${run_dir}/client.ports"
 
-convert_device_ids_to_bus_ids() {
-  local device_ids="${1}"
+get_id_map() {
   info_about usbip ${USBIP_PORT:+-t "${USBIP_PORT}"} list -r "${USBIP_SERVER}" \
-             | sed -nE "s/^\s*([^:]+):.* \((${device_ids})\)$/\1/p"
+             | sed -nE "s/^\s*([^:]+):.* \((.+)\)$/busid=\1#usbid=\2#/p"
 }
 
 attach_device() {
