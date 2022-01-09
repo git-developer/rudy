@@ -163,7 +163,7 @@ When `USBIP_SID_REGEX` is set to `true`, the `SID` is treated as regular express
 If you need to specify a serial containing a comma, use a different list separator and declare it in `USBIP_DEVICE_ID_SEPARATOR`. Example:
 ```yaml
     USBIP_DEVICE_ID_SEPARATOR: ";"
-    USBIP_DEVICE_IDS: "0000:0000;1111:1111:a,b
+    USBIP_DEVICE_IDS: "0000:0000;1111:1111:a,b"
 ```
 
 ## Pre-requisites
