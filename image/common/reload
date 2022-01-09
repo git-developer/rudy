@@ -7,5 +7,5 @@ set -eu
 if [ -e "${pid_file}" ]; then
   kill -HUP "$(cat "${pid_file}")"
 else
-  error config "Unable to reload because PID of main process is lost."
+  cancel "${rc_missing_arg}" config "Unable to reload because PID of main process is lost."
 fi

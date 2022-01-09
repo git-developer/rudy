@@ -4,14 +4,20 @@ set -eu
 
 MQTT_PUBLISH_OPTIONS="${MQTT_PUBLISH_OPTIONS:-${MQTT_OPTIONS-}}"
 MQTT_SUBSCRIBE_OPTIONS="${MQTT_SUBSCRIBE_OPTIONS:-${MQTT_OPTIONS-}}"
+rc_missing_topic=21
 
 mqtt_publish() {
+  set -eu
   local subtopic="${1-}" message="${2-}"
   [ -n "${MQTT_PUBLISH_TO_TOPIC-}" ] || return 0
-  [ -n "${subtopic}" ] || { error internal "Missing subtopic"; return 1; }
+  [ -n "${MQTT_PUBLISH_OPTIONS}"   ] || \
+    MQTT_PUBLISH_TO_TOPIC= cancel "${rc_missing_arg}" config \
+    "One of the environment variables [MQTT_PUBLISH_OPTIONS, MQTT_OPTIONS] must be set."
+  [ -n "${subtopic}" ] || cancel "${rc_missing_topic}" internal "Missing subtopic"
 
   local topic="${MQTT_PUBLISH_TO_TOPIC}/${subtopic}"
-  { printf "%s\0" "-t" "${topic}"
+  {
+    printf "%s\0" "-t" "${topic}"
     printf "%s\0" "-m" "${message}"
     printf "%s" "${MQTT_PUBLISH_OPTIONS}" | xargs printf "%s\0"
   } | xargs -0 mosquitto_pub

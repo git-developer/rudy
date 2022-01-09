@@ -8,21 +8,22 @@ get_id_map() {
   usbip list -p -l
 }
 
+find_serial() {
+  find_local_serial "${@}"
+}
+
 bind() {
+  set -eu
   local bus_id="${1}"
   if grep "${bus_id}" "${busid_file}" >/dev/null; then
     warn "Skipping binding of ${bus_id} because it is already bound"
   else
     info "Binding ${bus_id}"
-    usbip ${RUDY_DEBUG:+--debug} bind -b "${bus_id}" || {
-      rc="$?"
-      error config \
-        "Binding failed. Possible causes:" \
-        "- Bus id '${bus_id}' is invalid" \
-        "- Kernel module 'usbip-host' is not loaded (try 'modprobe usbip-host')" \
-        "- No write access to /sys/bus/usb/drivers"
-      return "${rc}"
-    }
+    usbip ${RUDY_DEBUG:+--debug} bind -b "${bus_id}" || cancel "$?" config \
+      "Binding failed. Possible causes:" \
+      "- Bus id '${bus_id}' is invalid" \
+      "- Kernel module 'usbip-host' is not loaded (try 'modprobe usbip-host')" \
+      "- No write access to /sys/bus/usb/drivers"
     echo "${bus_id}" >>"${busid_file}"
     mqtt_publish "bind" "${bus_id}"
   fi
@@ -45,6 +46,7 @@ start() {
     info "Starting network listener..."
     usbipd ${RUDY_DEBUG:+--debug} 2>&1 >"${log_file}" &
     echo "${!}" >>"${daemon_file}"
+    while ! nc -z localhost 3240 </dev/null; do sleep 1; done
     info "Network listener is started."
   else
     warn "Reusing running network listener"

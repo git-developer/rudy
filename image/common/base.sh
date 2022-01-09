@@ -2,6 +2,10 @@
 set -eu
 [ -z "${RUDY_TRACE-}" ] || set -x
 
+USBIP_DEVICE_ID_SEPARATOR="${USBIP_DEVICE_ID_SEPARATOR:-,}"
+USBIP_SID_REGEX="${USBIP_SID_REGEX:-false}"
+rc_missing_arg=11
+
 #
 # Common base script providing a skeleton and utility functions for a service.
 # A service is considered complete when it sources this script and additionally
@@ -18,10 +22,15 @@ set -eu
 #     Expected output: none
 #   get_id_map()
 #     Description:     Returns mappings between Bus-ID and Device-ID.
-#     Arguments:       none
+#     Arguments:       args[1..n] of find_bus_ids()
 #     Expected output: A newline-separated list of mappings.
 #                      Each mapping has the format busid=<bus-id>#usbid=<device-id>#
 #                      Example: `busid=1-1.1#usbid=1111:1111#\nbusid=2-2.2#usbid=2222:2222#`
+#   find_serial()
+#     Description:     Finds the serial of a device matching a given request.
+#     Arguments:       Bus-ID of the device, serial query string, args[1..n] of find_bus_ids()
+#     Expected output: If the serial of the device with the given bus id matches the query:
+#                      the serial and return code 0; no output and non-success return code otherwise.
 #
 # Optional:
 #   on_error()
@@ -43,39 +52,90 @@ log()  {
   done
 }
 
+debug() {
+  [ -z "${RUDY_DEBUG-}" ] || log "DEBUG" "${@}"
+}
+
 info() {
-  log "INFO" "${@}"
+  log "INFO " "${@}"
 }
 
 warn() {
-  log "WARNING" "${@}"
+  log "WARN " "${@}"
 }
 
-error() {
-  local category="${1}" && shift
+cancel() {
+  local rc="${1}" category="${2}" && shift 2
   log "ERROR [${category}]" "${@}"
   ! type on_error >/dev/null || on_error "${category}" "${@}"
+  return "${rc}"
 }
 
 info_about() {
   # jumping through hoops to fail on error in a POSIX shell:
-  set -eu            # shell options from above are not set because we are in a subshell and options do not get inher>
-  local output       # return code of subcommand would get lost when 'local' would be declared and assigned in one st>
+  set -eu            # shell options from above are not set because we are in a subshell and options do not get inherited
+  local output       # return code of subcommand would get lost when 'local' would be declared and assigned in one step
   output="$("${@}")"
   [ -z "${output}" ] || info "${output}"
   echo "${output}"
 }
 
-get_bus_ids_from_device_ids() {
-  info "Detecting bus ids from device ids ${USBIP_DEVICE_IDS}"
-  id_map="$(get_id_map)"
-  echo "${USBIP_DEVICE_IDS}" | tr ',' '\n' | while read device_id; do
-    bus_id="$(echo "${id_map}" | sed -nE "s/busid=([^#].+)#usbid=${device_id}#/\1/p")"
-    if [ -n "${bus_id}" ]; then
-      echo "${bus_id}"
+find_local_serial() {
+  set -eu
+  local bus_id="${1}" serial_query="${2}" file serial comparison match
+  file="/sys/bus/usb/devices/${bus_id}/serial"
+  if [ -r "${file}" ]; then
+    serial="$(cat "${file}")"
+    [ "${USBIP_SID_REGEX}" = 'true' ] && comparison='-e' || comparison='-F'
+    if match="$(echo "${serial}" | grep "${comparison}" "${serial_query}")"; then
+      echo "${match}"
+      debug "Serial '${serial}' of local device ${bus_id} matches '${serial_query}'"
+      return 0
     else
-      error config "No bus id found for device id '${device_id}'"
-      return 3
+      debug "Serial '${serial}' of local device ${bus_id} doesn't match '${serial_query}'"
+    fi
+  else
+    info "Local device ${bus_id} has no serial."
+  fi
+  return 1
+}
+
+resolve_bus_ids_for_device() {
+  set -eu
+  local devices="${1}" id="${2}" device_id serial_query serial message
+  shift 2
+  device_id="$(echo "${id}" | cut -c 1-9)"
+  serial_query="$(echo "${id}" | cut -c 11-)"
+
+  debug "Resolving bus id for device id '${id}'"
+  echo "${devices}" \
+  | sed -nE "s/^busid=([^#]+)#usbid=${device_id}#$/\1/p" \
+  | while read bus_id; do
+    message="Resolved bus id ${bus_id} for device id '${id}'"
+    if [ -z "${serial_query}" ]; then
+      echo "${bus_id}"
+      info "${message}"
+    elif serial="$(find_serial "${bus_id}" "${serial_query}" "${@}")"; then
+      echo "${bus_id}"
+      info "${message} matching serial '${serial}'"
+      [ "${USBIP_SID_REGEX}" = 'true' ] || return 0
+    fi
+  done
+}
+
+resolve_bus_ids() {
+  set -eu
+  local fail_on_missing="${1:-true}" devices
+  [ "${#}" -lt 1 ] || shift
+  devices="$(get_id_map "${@}")"
+  echo "${USBIP_DEVICE_IDS}" \
+  | tr "${USBIP_DEVICE_ID_SEPARATOR}" '\n' \
+  | while read id; do
+    bus_ids="$(resolve_bus_ids_for_device "${devices}" "${id}" "${@}")"
+    if [ -n "${bus_ids}" ]; then
+      echo "${bus_ids}"
+    elif [ "${fail_on_missing}" = 'true' ]; then
+      cancel "${rc_missing_arg}" server "No bus id found for device id '${id}'"
     fi
   done
 }
@@ -83,28 +143,26 @@ get_bus_ids_from_device_ids() {
 find_bus_ids() {
   set -eu
   local bus_ids
+  debug "Detecting bus ids"
 
-  if [ -z "${USBIP_DEVICE_IDS-}" ] && [ -z "${USBIP_BUS_IDS-}" ]; then
-    error config "One of the environment variables [USBIP_BUS_IDS, USBIP_DEVICE_IDS] must be set."
-    return 2
-  fi
+  [ -n "${USBIP_DEVICE_IDS-}" ] || \
+  [ -n "${USBIP_BUS_IDS-}"    ] || \
+  cancel "${rc_missing_arg}" config \
+    "One of the environment variables [USBIP_BUS_IDS, USBIP_DEVICE_IDS] must be set."
 
   if [ -n "${USBIP_DEVICE_IDS-}" ]; then
-    bus_ids="$(get_bus_ids_from_device_ids)"
-    info "Detected bus ids: $(echo "${bus_ids}" | xargs)"
+    debug "Resolving bus ids for device ids '${USBIP_DEVICE_IDS}'"
+    bus_ids="$(resolve_bus_ids "${@}")"
   fi
   if [ -n "${USBIP_BUS_IDS-}" ]; then
-    bus_ids="$(printf "${bus_ids:+${bus_ids}\n}$(echo "${USBIP_BUS_IDS}" | tr ',' '\n')" | sort | uniq)"
+    bus_ids="$(printf "${bus_ids:+${bus_ids}\n}$(echo "${USBIP_BUS_IDS}" | tr ',' '\n')")"
   fi
 
   if [ -n "${bus_ids}" ]; then
-    info "Found bus ids: $(echo "${bus_ids}" | xargs)"
-  else
-    error config "No bus ids found."
-    return 2
+    bus_ids="$(echo "${bus_ids}" | sort | uniq)"
+    debug "Found bus ids: $(echo "${bus_ids}" | xargs)"
+    echo "${bus_ids}"
   fi
-
-  echo "${bus_ids}"
 }
 
 reload() {
@@ -119,11 +177,17 @@ shutdown() {
 }
 
 load() {
+  local rc
   mkdir -p "${run_dir}"
   echo "$$">"${pid_file}"
-  start
-  wait $(xargs -a "${daemon_file}")
-  info "Shutdown."
+  if start; then
+    wait $(xargs -a "${daemon_file}")
+    info "Shutdown."
+  else
+    rc="$?"
+    shutdown
+    return "${rc}"
+  fi
 }
 
 on_trap() {

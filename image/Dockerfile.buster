@@ -1,5 +1,5 @@
 FROM debian:buster-slim
-RUN  apt-get update && apt-get install -y usbip mosquitto-clients && apt-get clean
+RUN  apt-get update && apt-get install -y usbip netcat mosquitto-clients && apt-get clean
 ARG  SERVICE
 ENV  RUDY_HOME="/opt/rudy-${SERVICE}"
 ENV  PATH="${PATH}:${RUDY_HOME}"

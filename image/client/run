@@ -3,92 +3,166 @@ set -eu
 
 . "$(dirname "${0}")/mqtt-support.sh"
 port_file="${run_dir}/client.ports"
+usbip_port="${USBIP_PORT:-3240}"
+USBIP_ATTACH_DELAY="${USBIP_ATTACH_DELAY:-2}"
+
+find_ports() {
+  set -eu
+  local devices="${1}" bus_id="${2}"
+  echo "${devices}" \
+  | grep -B 2 "usbip://${USBIP_SERVER}:${usbip_port}/${bus_id}" \
+  | sed -nE 's/Port 0?([^:]+):.*/\1/p' \
+  | grep .
+}
+
+find_local_bus_ids() {
+  set -eu
+  local devices="${1}" remote_bus_id="${2}"
+  echo "${devices}" \
+  | sed -nE "s;^\s+([^ ]+) -> usbip://${USBIP_SERVER}:${usbip_port}/${remote_bus_id};\1;p" \
+  | grep .
+}
+
+list_devices() {
+  set -eu
+  local scope="${1-}" devices ports
+  devices="$(usbip port | tail -n +3)"
+  if [ "${scope}" = 'all' ]; then
+    echo "${devices}"
+  else
+    if [ -s "${port_file}" ]; then
+      ports="$(while read port; do printf '%02g|' "${port}"; done <"${port_file}")"
+      echo "${devices}" | grep -A 2 -E "^Port (${ports}):.*$"
+    fi
+  fi
+}
+
+list_ports() {
+  list_devices 'all' | sed -nE 's/^Port ([^:]+):.*$/\1/p'
+}
 
 get_id_map() {
-  info_about usbip ${USBIP_PORT:+-t "${USBIP_PORT}"} list -r "${USBIP_SERVER}" \
-             | sed -nE "s/^\s*([^:]+):.* \((.+)\)$/busid=\1#usbid=\2#/p"
+  set -eu
+  local location="${1-}"
+  if [ "${location}" = 'local' ]; then
+    list_devices 'all' \
+    | awk -F ' ' '/Port/{getline; printf $6; getline; print $3}' \
+    | sed -nE 's|\((....:....)\).*/([^/]+)$|busid=\2#usbid=\1#|p'
+  else
+    info_about usbip ${USBIP_PORT:+-t "${USBIP_PORT}"} list -r "${USBIP_SERVER}" \
+    | sed -nE 's/^\s*([^: ]+):.* \((.+)\)$/busid=\1#usbid=\2#/p'
+  fi
+}
+
+find_serial() {
+  set -eu
+  local remote_bus_id="${1}" serial_query="${2}" scope="${3-}" list local_bus_ids port serial
+
+  if ! local_bus_ids="$(find_local_bus_ids "$(list_devices "${scope}")" "${remote_bus_id}")"; then
+    debug "Attaching remote device ${remote_bus_id} to read its serial"
+    port="$(attach "${remote_bus_id}")"
+    sleep "${USBIP_ATTACH_DELAY}"
+    local_bus_ids="$(find_local_bus_ids "$(list_devices "${scope}")" "${remote_bus_id}")"
+    debug "Remote device ${remote_bus_id} on port ${port} has local bus id ${local_bus_ids}"
+  fi
+  serial="$(\
+    echo "${local_bus_ids}" \
+    | while read local_bus_id; do find_local_serial "${local_bus_id}" "${serial_query}" || true; done \
+  )"
+  [ -z "${port-}" ] || [ -n "${serial}" ] || detach "${port}"
+  [ -n "${serial}" ] && echo "${serial}"
 }
 
 attach_device() {
   set -eu
-  local bus_id="${1}"
-  local output
-  if output="$(usbip ${USBIP_PORT:+-t "${USBIP_PORT}"} --debug attach -r "${USBIP_SERVER}" -b "${bus_id}" 2>&1)"; then
-    rc="$?"
-    echo "${output}" | tail -n 1 | sed -nE 's/^.*attached port: ([0-9]+)\s*$/\1/p'
-  else
-    rc="$?"
-    local errors="$(echo "${output}" | grep ' error: ')"
-    [ -z "${errors}" ] || error config "${errors}"
+  local bus_id="${1}" devices output port
+  devices="$(list_devices 'all')"
+  if find_local_bus_ids "${devices}" "${bus_id}" >/dev/null; then
+    port="$(find_ports "${devices}" "${bus_id}")"
+    warn "Found orphaned device for bus id ${bus_id} attached to port ${port}"
+    [ "${USBIP_DETACH_ORPHANS:-true}" != 'true' ] || detach "${port}"
   fi
-  return "${rc}"
+  if output="$(usbip ${USBIP_PORT:+-t "${USBIP_PORT}"} --debug attach -r "${USBIP_SERVER}" -b "${bus_id}" 2>&1)"; then
+    echo "${output}" | tail -n 1 | sed -nE 's/^.*attached port: ([0-9]+)\s*$/\1/p' | grep .
+  else
+    local rc="$?"
+    echo "${output}" | grep ' error: ' | while IFS='' read message; do cancel "${rc}" config "${message}"; done
+  fi
 }
 
 attach() {
-  local bus_id="${1}"
-  local port
-  if port="$(attach_device ${bus_id})" && [ -n "${port}" ]; then
-    echo "${port}" >>"${port_file}"
-    mqtt_publish "attach" "${port}: ${USBIP_SERVER} ${USBIP_PORT:-3240} ${bus_id}"
+  set -eu
+  local bus_id="${1}" ports
+  debug "Attaching device ${bus_id}"
+
+  if [ -s "${port_file}" ] \
+     && ports="$(find_ports "$(list_devices)" "${bus_id}")" \
+     && echo "${ports}" \
+        | while read port; do grep "$(printf '%01g' "${port}")" "${port_file}"; done \
+        | grep -q .; then
+    info "Device ${bus_id} is attached to port ${ports}"
+    return 0
+  fi
+
+  if port="$(attach_device ${bus_id})"; then
+    echo "${port}" | tee -a "${port_file}"
+    info "Attached device ${bus_id} to port ${port}"
+    mqtt_publish "attach" "${port}: ${USBIP_SERVER} ${usbip_port} ${bus_id}"
   else
-    rc="$?"
-    error config "Attachment failed. Possible causes:" \
+    cancel "$?" config "Attachment failed. Possible causes:" \
       "- Bus id '${bus_id}' is invalid" \
       "- Kernel module 'vhci-hcd' is not loaded (try 'modprobe vhci-hcd')" \
       "- No write access to /sys/devices/platform/ (try to run as root)"
-    return "${rc}"
   fi
 }
 
 detach() {
-  local port_id="${1}"
-  if usbip ${RUDY_DEBUG:+--debug} detach -p "${port_id}"; then
-    info "Detached port ${port_id}."
-    mqtt_publish "detach" "${port_id}"
+  set -eu
+  local port="${1}"
+  [ -n "${port}" ] || { warn "Missing port on detach"; return; }
+  debug "Detaching port ${port}"
+  if usbip ${RUDY_TRACE:+--debug} detach -p "${port}"; then
+    [ ! -s "${port_file}" ] || sed -i "/^${port}$/d" "${port_file}"
+    mqtt_publish "detach" "${port}"
   fi
 }
 
 detach_orphans() {
-  [ -n "${USBIP_DEVICE_IDS}" ] || return 0
+  set -eu
+  local devices
   info "Detaching orphans"
-
-  local device_ids
-  device_ids="$(echo "${USBIP_DEVICE_IDS}" | tr ',' '|')"
-  usbip port \
-  | sed -nE "N;s/Port ([0-9]+).*\n.*\((${device_ids})\)/\1/p" \
-  | while read port_id; do detach "${port_id}"; done
+  devices="$(list_devices 'all')"
+  [ -z "${devices}" ] || find_bus_ids 'false' 'local' | while read bus_id; do
+    find_ports "${devices}" "${bus_id}" | while read port; do detach "${port}"; done
+  done
 }
 
 detach_all() {
   info "Detaching all ports"
-  usbip port \
-  | sed -nE 's/^Port ([^:]+):.*$/\1/p' \
-  | while read port_id; do detach "${port_id}"; done
+  list_ports | while read port; do detach "${port}"; done
 }
 
 start() {
+  set -eu
+  local bus_ids
   info "Starting client..."
 
-  if [ -z "${USBIP_SERVER-}" ]; then
-    error config "Missing environment variable USBIP_SERVER"
-    return 1
-  fi
+  [ -n "${USBIP_SERVER-}" ] || cancel "${rc_missing_arg}" config "Missing environment variable USBIP_SERVER"
 
-  local bus_ids
-  bus_ids="$(find_bus_ids)"
+  # for some unkown reason, 'set -eu' is not working to cancel on error here
+  bus_ids="$(find_bus_ids)" || return "$?"
 
-  info "Starting attachment..."
-  info "Attaching ${bus_ids}"
-  echo "${bus_ids}" | tr ',' '\n' | while read bus_id; do attach "${bus_id}"; done
-  local port_ids="$(xargs -a "${port_file}")"
-  info "Attachment complete. Port ids: ${port_ids}"
-  sleep 1
-  info "$(usbip ${RUDY_DEBUG:+--debug} port)"
+  debug "Attaching devices: $(echo "${bus_ids}" | xargs)"
+  echo "${bus_ids}" | while read bus_id; do attach "${bus_id}" >/dev/null; done
+  local ports="$(xargs -a "${port_file}")"
+  debug "Attachment complete, port ids: ${ports}"
+  sleep "${USBIP_ATTACH_DELAY}"
+  info "$(usbip ${RUDY_TRACE:+--debug} port)"
 
   tail -f /dev/null &
   echo "${!}" >>"${daemon_file}"
 
-  mqtt_publish "start" "${port_ids}"
+  mqtt_publish "start" "${ports}"
   mqtt_subscribe
   info "Client is started."
 }
@@ -98,7 +172,7 @@ stop() {
 
   info "Detaching..."
   if [ -f "${port_file}" ]; then
-    while read port_id; do detach "${port_id}"; done <"${port_file}"
+    while read port; do detach "${port}"; done <"${port_file}"
     rm "${port_file}"
   fi
   [ "${USBIP_DETACH_ORPHANS:-true}" != 'true' ] || detach_orphans
