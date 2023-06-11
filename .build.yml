@@ -1,5 +1,5 @@
 include:
-  remote: "https://github.com/git-developer/docker-support/raw/v3.1.0/gitlab-ci/docker-template.yml"
+  remote: "https://github.com/git-developer/docker-support/raw/v3.3.1/gitlab-ci/docker-template.yml"
 
 variables:
   IMAGE_NAME: "${CI_PROJECT_NAMESPACE}/rudy-${SERVICE}"
