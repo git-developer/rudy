@@ -15,7 +15,7 @@ services:
       USBIP_SERVER: "server-host"
       USBIP_DEVICE_IDS: "0000:0000,1111:1111"
       MQTT_OPTIONS: "-h broker-host"
-      MQTT_PUBLISH_TOPIC: "rudy/client"
+      MQTT_PUBLISH_TO_TOPIC: "rudy/client"
       MQTT_RELOAD_ON_TOPIC: "rudy/server/start"
     volumes:
       - "/var/run/vhci_hcd:/var/run/vhci_hcd"

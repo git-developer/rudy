@@ -25,7 +25,7 @@ services:
     environment:
       USBIP_DEVICE_IDS: "0000:0000"
       MQTT_OPTIONS: "-h broker-host"
-      MQTT_PUBLISH_TOPIC: "rudy/server"
+      MQTT_PUBLISH_TO_TOPIC: "rudy/server"
       MQTT_RELOAD_ON_TOPIC: "rudy/client/error/server"
     volumes:
       - "/sys/bus/usb/drivers/usb:/sys/bus/usb/drivers/usb"
@@ -76,7 +76,7 @@ services:
       USBIP_SERVER: "server-host"
       USBIP_DEVICE_IDS: "0000:0000"
       MQTT_OPTIONS: "-h broker-host"
-      MQTT_PUBLISH_TOPIC: "rudy/client"
+      MQTT_PUBLISH_TO_TOPIC: "rudy/client"
       MQTT_RELOAD_ON_TOPIC: "rudy/server/start"
     volumes:
       - "/var/run/vhci_hcd:/var/run/vhci_hcd"
@@ -179,20 +179,20 @@ $ sudo apt install docker-compose
 
 ## Advanced topics
 ### MQTT publishing
-Configure `MQTT_PUBLISH_TOPIC` to publish client and server states via MQTT.
+Configure `MQTT_PUBLISH_TO_TOPIC` to publish client and server states via MQTT.
 
 Example:
 - Server configuration:
   ```yaml
   environment:
     USBIP_DEVICE_IDS: "4971:1011"
-    MQTT_PUBLISH_TOPIC: "rudy/server"
+    MQTT_PUBLISH_TO_TOPIC: "rudy/server"
   ```
 - Client configuration:
   ```yaml
   environment:
     USBIP_DEVICE_IDS: "4971:1011"
-    MQTT_PUBLISH_TOPIC: "rudy/client"
+    MQTT_PUBLISH_TO_TOPIC: "rudy/client"
   ```
 - MQTT messages published on starting server and client and then stopping client and server:
   ```
@@ -225,7 +225,7 @@ Example:
   ```yaml
   restart: unless-stopped
   environment:
-    MQTT_PUBLISH_TOPIC: "rudy/client"
+    MQTT_PUBLISH_TO_TOPIC: "rudy/client"
   ```
 
 ### Prepare Client for Server Restart
@@ -236,7 +236,7 @@ Example:
   ```yaml
   environment:
     USBIP_DEVICE_IDS: "4971:1011"
-    MQTT_PUBLISH_TOPIC: "rudy/server"
+    MQTT_PUBLISH_TO_TOPIC: "rudy/server"
   ```
 - Client configuration:
   ```yaml
