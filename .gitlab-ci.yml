@@ -4,4 +4,11 @@ build-services:
   parallel:
     matrix:
       - SERVICE: [server, client]
-        DISTRO:  [alpine, bookworm, bullseye, buster]
+        DISTRO:  [alpine]
+        IMAGE_PLATFORMS: linux/amd64,linux/i386,linux/arm64,linux/arm/v7,linux/arm/v6
+      - SERVICE: [server, client]
+        DISTRO:  [bookworm, bullseye]
+        IMAGE_PLATFORMS: linux/amd64,linux/i386,linux/arm64,linux/arm/v7,linux/arm/v5
+      - SERVICE: [server, client]
+        DISTRO:  [buster]
+        IMAGE_PLATFORMS: linux/amd64,linux/i386,linux/arm64,linux/arm/v7
